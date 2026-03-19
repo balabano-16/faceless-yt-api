@@ -28,6 +28,8 @@ class VideoRequest(BaseModel):
     voice_id: Optional[str] = "21m00Tcm4TlvDq8ikWAM"
     style: Optional[str] = "cinematic, realistic, dramatic"
     language: Optional[str] = "en"
+    format: Optional[str] = "landscape"  # "landscape" veya "portrait"
+    use_video: Optional[bool] = False     # True = video klip, False = görsel
 
 class JobStatus(BaseModel):
     job_id: str
