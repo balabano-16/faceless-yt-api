@@ -58,32 +58,49 @@ def make_cover_slide(image_path: str, title: str, audio_path: str, output_path: 
     return output_path
 
 def make_section_slide(image_path: str, heading: str, number: int, audio_path: str, output_path: str, duration: float):
-    """Section slaydı: üstte numara + başlık"""
+    """Section slaydı: Pillow ile üstte numara + başlık bar"""
     validate_inputs(image_path, audio_path)
+    from PIL import Image, ImageDraw, ImageFont
 
-    safe_heading = heading.replace("'", "\\'").replace(":", "\\:").replace("[", "\\[").replace("]", "\\]")
-    
-    font_size = 42
-    if len(heading) > 40:
-        font_size = 34
-    if len(heading) > 60:
-        font_size = 28
+    img = Image.open(image_path).convert("RGBA")
+    img = img.resize((1280, 720), Image.LANCZOS)
+
+    def get_font(size):
+        font_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+        ]
+        for fp in font_paths:
+            if os.path.exists(fp):
+                return ImageFont.truetype(fp, size)
+        return ImageFont.load_default()
+
+    # Üst bar overlay
+    overlay = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
+    ov_draw = ImageDraw.Draw(overlay)
+    ov_draw.rectangle([0, 0, 1280, 90], fill=(0, 0, 0, 185))
+    ov_draw.rectangle([0, 0, 6, 90], fill=(168, 85, 247, 255))
+    img = Image.alpha_composite(img, overlay).convert("RGB")
+    draw = ImageDraw.Draw(img)
+
+    num_font = get_font(56)
+    head_font_size = 38 if len(heading) < 40 else 30 if len(heading) < 60 else 24
+    head_font = get_font(head_font_size)
+
+    draw.text((20, 15), str(number), font=num_font, fill=(168, 85, 247))
+    draw.text((88, (90 - head_font_size) // 2), heading, font=head_font, fill=(255, 255, 255))
+
+    section_path = image_path.replace(".jpg", "_section.jpg")
+    img.save(section_path, "JPEG", quality=95)
 
     cmd = [
         "ffmpeg", "-y",
-        "-loop", "1", "-i", image_path,
+        "-loop", "1", "-i", section_path,
         "-i", audio_path,
-        "-filter_complex",
-        f"[0:v]scale=1280:720:force_original_aspect_ratio=increase,"
-        f"crop=1280:720,"
-        f"format=yuv420p,"
-        # Üst bar
-        f"drawbox=x=0:y=0:w=iw:h=90:color=black@0.75:t=fill,"
-        # Numara
-        f"drawtext=text='{number}':fontcolor=#a855f7:fontsize=52:x=24:y=18:borderw=2:bordercolor=black,"
-        # Başlık
-        f"drawtext=text='{safe_heading}':fontcolor=white:fontsize={font_size}:x=85:y=(90-text_h)/2:borderw=1:bordercolor=black[v]",
-        "-map", "[v]", "-map", "1:a",
+        "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p",
+        "-map", "0:v", "-map", "1:a",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
         "-pix_fmt", "yuv420p", "-c:a", "aac",
         "-shortest", "-t", str(duration + 0.5),
