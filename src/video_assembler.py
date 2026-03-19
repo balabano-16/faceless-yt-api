@@ -54,14 +54,12 @@ def add_ken_burns(image_path: str, audio_path: str, output_path: str, duration: 
         "-loop", "1",
         "-i", image_path,
         "-i", audio_path,
-        "-filter_complex",
-        f"[0:v]scale=1920:1080:force_original_aspect_ratio=increase,"
-        f"crop=1920:1080,"
-        f"format=yuv420p,"
-        f"zoompan=z='min(zoom+0.0015,1.3)':d={int(duration*25)}:s=1920x1080[v]",
-        "-map", "[v]",
+        "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p",
+        "-map", "0:v",
         "-map", "1:a",
         "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "28",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "-shortest",
