@@ -69,17 +69,28 @@ class VideoPipeline:
                 {"type": "cover", "text": script["intro"]["text"], "image_prompt": cover_prompt, "heading": title, "number": 0},
             ]
             for s in script["sections"]:
+                heading = s.get("heading", f"Point {s['number']}")
+                base_prompt = s.get("image_prompt", req.topic)
+                section_prompt = (
+                    f"Eye-catching YouTube video slide, {base_prompt}, "
+                    f"title text: {heading}"
+                )
                 raw_sections.append({
                     "type": "section",
                     "text": s["text"],
-                    "image_prompt": s.get("image_prompt", req.topic),
-                    "heading": s.get("heading", f"Point {s['number']}"),
+                    "image_prompt": section_prompt,
+                    "heading": heading,
                     "number": s["number"]
                 })
             raw_sections.append({
                 "type": "outro",
                 "text": script["outro"]["text"],
-                "image_prompt": script["outro"]["image_prompt"],
+                "image_prompt": (
+                    f"YouTube outro screen, {script['outro']['image_prompt']}, "
+                    f"with bold text: SUBSCRIBE, large red subscribe button, "
+                    f"notification bell icon, like button, "
+                    f"dramatic cinematic background, high quality"
+                ),
                 "heading": "",
                 "number": 0
             })
