@@ -120,7 +120,7 @@ def concat_with_transitions(video_paths: list, output_path: str):
         raise Exception(f"Concat error: {result.stderr[-500:]}")
     return output_path
 
-async def assemble_video(slides: list, output_dir: str, job_id: str, title: str = "") -> str:
+async def assemble_video(slides: list, output_dir: str, job_id: str, title: str = "", is_portrait: bool = False) -> str:
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     slide_videos = []
 

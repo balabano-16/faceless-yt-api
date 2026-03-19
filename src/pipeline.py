@@ -101,13 +101,18 @@ class VideoPipeline:
             # 3. Her slide için ses + görsel paralel üret
             self._update("generating_assets", 15, f"0/{total} sections ready...")
 
+            # Format ayarı
+            is_portrait = getattr(req, 'format', 'landscape') == 'portrait'
+            aspect_ratio = "9:16" if is_portrait else "16:9"
+            format_hint = "vertical 9:16 short-form video, portrait orientation" if is_portrait else "horizontal 16:9 YouTube video, landscape"
+
             for i, section in enumerate(raw_sections):
-                full_prompt = f"{section['image_prompt']}, {req.style}, high quality, 4K"
+                full_prompt = f"{section['image_prompt']}, {format_hint}, {req.style}, high quality, 4K"
                 audio_path = f"{self.output_dir}/audio_{i}.mp3"
 
                 audio_result, image_url = await asyncio.gather(
                     text_to_speech(section["text"], req.voice_id, audio_path),
-                    generate_image(full_prompt)
+                    generate_image(full_prompt, aspect_ratio=aspect_ratio)
                 )
 
                 progress = 15 + int((i + 1) / total * 60)
@@ -122,7 +127,7 @@ class VideoPipeline:
 
             # 4. Video birleştir
             self._update("assembling", 80, "Assembling video...")
-            final_path = await assemble_video(slides, self.output_dir, self.job_id, title)
+            final_path = await assemble_video(slides, self.output_dir, self.job_id, title, is_portrait=is_portrait)
 
             # 5. URL döndür
             video_url = f"{BASE_URL}/videos/{self.job_id}/final_{self.job_id}.mp4"
