@@ -5,3 +5,4 @@ websockets==13.0
 pydantic==2.8.0
 python-multipart==0.0.9
 aiofiles==23.2.1
+Pillow==10.4.0
