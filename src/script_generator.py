@@ -24,6 +24,29 @@ def _auth_headers() -> dict:
         "x-signature": signature,
     }
 
+def _extract_text_from_output(outputs: list) -> str:
+    """Wiro output listesinden metin çıkar — tüm olası formatları dene"""
+    for out in outputs:
+        # content.raw içinde
+        content = out.get("content", {})
+        if isinstance(content, dict):
+            raw = content.get("raw", "")
+            if raw and len(raw) > 50:
+                print(f"[DEBUG] Got text from content.raw: {raw[:100]}")
+                return raw
+            # answer listesi içinde
+            answer = content.get("answer", [])
+            if answer:
+                text = answer[0] if isinstance(answer[0], str) else str(answer[0])
+                if len(text) > 50:
+                    print(f"[DEBUG] Got text from content.answer: {text[:100]}")
+                    return text
+        # Direkt url
+        url = out.get("url", "")
+        if url and url.startswith("http") and not url.endswith(('.jpg', '.png', '.mp4')):
+            return f"__URL__{url}"
+    return ""
+
 async def _poll_task(taskid: str, timeout: int = 120) -> str:
     start = time.time()
     async with httpx.AsyncClient(timeout=30) as client:
@@ -44,63 +67,82 @@ async def _poll_task(taskid: str, timeout: int = 120) -> str:
             print(f"[DEBUG] Gemini task status: {status}")
             if status == "task_postprocess_end":
                 outputs = task.get("outputs", [])
-                print(f"[DEBUG] Gemini outputs count: {len(outputs)}")
-                if outputs:
-                    out = outputs[0]
-                    # content.raw içinde JSON var
-                    content = out.get("content", {})
-                    if isinstance(content, dict):
-                        raw = content.get("raw", "")
-                        if raw:
-                            print(f"[DEBUG] Got raw from content: {raw[:200]}")
-                            return raw
-                        # answer listesi içinde olabilir
-                        answer = content.get("answer", [])
-                        if answer:
-                            print(f"[DEBUG] Got answer: {str(answer[0])[:200]}")
-                            return answer[0] if isinstance(answer[0], str) else str(answer[0])
-                    # URL ise fetch et
-                    url = out.get("url", "")
-                    if url and url.startswith("http"):
-                        async with httpx.AsyncClient(timeout=30) as c:
-                            r = await c.get(url)
-                            return r.text
-                    return str(out)
+                text = _extract_text_from_output(outputs)
+                if text.startswith("__URL__"):
+                    url = text[7:]
+                    async with httpx.AsyncClient(timeout=30) as c:
+                        r = await c.get(url)
+                        return r.text
+                if text:
+                    return text
                 debug = task.get("debugoutput", "")
-                print(f"[DEBUG] Gemini debugoutput: {debug[:200]}")
-                return debug
+                if debug:
+                    return debug
+                return str(task)
             elif status == "task_cancel":
                 raise Exception("Gemini task cancelled")
             await asyncio.sleep(3)
     raise Exception("Gemini task timeout")
 
+def _parse_json(raw: str) -> dict | None:
+    """JSON'u çeşitli formatlarda parse etmeye çalış"""
+    raw = raw.strip()
+    
+    # Markdown fence içinde
+    if "```" in raw:
+        for part in raw.split("```"):
+            part = part.strip().lstrip("json").strip()
+            if part.startswith("{"):
+                try:
+                    return json.loads(part)
+                except:
+                    continue
+    
+    # Direkt JSON
+    if raw.startswith("{"):
+        try:
+            return json.loads(raw)
+        except:
+            pass
+    
+    # JSON bloğu bul
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start >= 0 and end > start:
+        try:
+            return json.loads(raw[start:end])
+        except:
+            pass
+    
+    return None
+
 async def generate_script(topic: str, sections: int = 5, language: str = "en") -> dict:
-    prompt = f"""You are a YouTube video script writer.
+    prompt = f"""You are a YouTube video script writer. Write engaging, unique content.
 Topic: {topic}
 Number of sections: {sections}
 
-Return ONLY this JSON, no markdown, no explanation:
+Return ONLY valid JSON, no markdown fences, no explanation:
 {{
-  "title": "engaging video title",
+  "title": "catchy engaging video title",
   "intro": {{
-    "text": "30-40 word engaging intro narration about {topic}",
-    "image_prompt": "cinematic wide shot of {topic}, dramatic lighting, 4K"
+    "text": "35 word engaging intro that hooks the viewer about {topic}",
+    "image_prompt": "cinematic wide establishing shot for {topic}, dramatic lighting, 4K"
   }},
   "sections": [
     {{
       "number": 1,
-      "heading": "First point heading",
-      "text": "60-80 word unique narration for this specific point about {topic}",
-      "image_prompt": "cinematic image representing this specific point, dramatic lighting"
+      "heading": "Unique specific point heading",
+      "text": "70 word unique detailed narration for this specific point. Make it informative and engaging. Never repeat content from other sections.",
+      "image_prompt": "specific cinematic image representing this unique point, dramatic lighting"
     }}
   ],
   "outro": {{
-    "text": "20-30 word call to action",
-    "image_prompt": "cinematic motivational image, dark background"
+    "text": "25 word call to action encouraging likes and subscribe",
+    "image_prompt": "motivational cinematic outro scene, dark background, inspiring atmosphere"
   }}
 }}
 
-Make each section completely unique and specific. Do not repeat content between sections."""
+IMPORTANT: Generate exactly {sections} sections. Each section must be completely unique and specific. Never repeat phrases."""
 
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
@@ -108,80 +150,73 @@ Make each section completely unique and specific. Do not repeat content between 
             headers=_auth_headers(),
             data={
                 "prompt": prompt,
-                "maxOutputTokens": 3000,
-                "temperature": "0.8",
+                "maxOutputTokens": 4000,
+                "temperature": "0.9",
                 "thinkingBudget": 0,
             }
         )
         resp.raise_for_status()
         data = resp.json()
-        print(f"[DEBUG] Gemini run response: {data}")
+        print(f"[DEBUG] Gemini taskid: {data.get('taskid')}")
 
     taskid = data.get("taskid")
     if not taskid:
-        print(f"[ERROR] No taskid from Gemini: {data}")
+        print(f"[ERROR] No taskid: {data}")
         return _fallback_script(topic, sections)
 
     raw = await _poll_task(str(taskid))
-    print(f"[DEBUG] Raw Gemini response (first 800): {raw[:800]}")
+    print(f"[DEBUG] Raw response (first 500): {raw[:500]}")
 
-    # JSON parse
-    raw = raw.strip()
-    if "```" in raw:
-        for part in raw.split("```"):
-            part = part.strip().lstrip("json").strip()
-            if part.startswith("{"):
-                try:
-                    result = json.loads(part)
-                    print(f"[DEBUG] Script parsed successfully from fence")
-                    return result
-                except:
-                    continue
-
-    # Direkt parse dene
-    try:
-        # JSON başlangıcını bul
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
-        if start >= 0 and end > start:
-            json_str = raw[start:end]
-            result = json.loads(json_str)
-            print(f"[DEBUG] Script parsed successfully")
+    result = _parse_json(raw)
+    if result:
+        # Section sayısını kontrol et
+        actual_sections = result.get("sections", [])
+        print(f"[DEBUG] Parsed script with {len(actual_sections)} sections")
+        if len(actual_sections) >= sections:
             return result
-    except json.JSONDecodeError as e:
-        print(f"[ERROR] JSON parse failed: {e}")
+        # Az section geldiyse fallback ile doldur
+        while len(actual_sections) < sections:
+            n = len(actual_sections) + 1
+            actual_sections.append({
+                "number": n,
+                "heading": f"Key Point {n}",
+                "text": f"This is another important aspect of {topic} that you should know about. Understanding this will help you get better results.",
+                "image_prompt": f"cinematic image representing {topic} concept {n}, dramatic lighting"
+            })
+        result["sections"] = actual_sections
+        return result
 
-    print(f"[WARN] Falling back to template script")
+    print(f"[WARN] JSON parse failed, using fallback")
     return _fallback_script(topic, sections)
 
 def _fallback_script(topic: str, sections: int) -> dict:
     section_topics = [
-        f"The most important thing about {topic}",
-        f"How {topic} works in practice",
+        f"Why {topic} matters more than you think",
+        f"The science behind {topic}",
         f"Common mistakes people make with {topic}",
-        f"Expert tips for {topic}",
-        f"The future of {topic}",
-        f"Getting started with {topic}",
-        f"Advanced strategies for {topic}",
-        f"Why {topic} matters today",
+        f"Expert strategies for {topic}",
+        f"The surprising truth about {topic}",
+        f"How to get started with {topic} today",
+        f"Advanced techniques for {topic}",
+        f"Real results from {topic}",
     ]
     return {
-        "title": f"Everything You Need to Know About {topic}",
+        "title": f"The Ultimate Guide to {topic}",
         "intro": {
-            "text": f"Are you curious about {topic}? In this video, we'll cover the {sections} most important things you need to know. Let's dive in.",
-            "image_prompt": f"cinematic wide establishing shot representing {topic}, dramatic lighting, 4K"
+            "text": f"What if everything you knew about {topic} was wrong? In this video, we reveal the {sections} most important things you need to know right now.",
+            "image_prompt": f"cinematic establishing shot representing {topic}, epic atmosphere, dramatic lighting, 4K"
         },
         "sections": [
             {
                 "number": i + 1,
                 "heading": section_topics[i % len(section_topics)],
-                "text": f"When it comes to {section_topics[i % len(section_topics)].lower()}, there are several key factors to consider. Understanding this aspect will completely change how you approach {topic} in your daily life.",
+                "text": f"When it comes to {section_topics[i % len(section_topics)].lower()}, most people get it completely wrong. The key insight here is that {topic} requires a fundamentally different approach than what most people think. By understanding this principle, you can transform your results dramatically.",
                 "image_prompt": f"cinematic image representing {section_topics[i % len(section_topics)]}, realistic, dramatic lighting, 4K"
             }
             for i in range(sections)
         ],
         "outro": {
-            "text": f"Now you know the top {sections} things about {topic}. If this was helpful, like and subscribe for more content like this!",
-            "image_prompt": "cinematic dark background with glowing subscribe button, motivational atmosphere"
+            "text": f"Now you know the top {sections} things about {topic}. If this helped you, smash that like button and subscribe for more content like this!",
+            "image_prompt": "cinematic dark background with glowing subscribe button, motivational atmosphere, dramatic lighting"
         }
     }
