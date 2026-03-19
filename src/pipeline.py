@@ -31,35 +31,58 @@ class VideoPipeline:
             # 1. Script üret
             self._update("generating_script", 5, "Writing script...")
             script = await generate_script(req.topic, req.sections, req.language)
+            title = script.get("title", req.topic)
 
-            # 2. Tüm bölümleri topla
-            all_sections = [script["intro"]] + script["sections"] + [script["outro"]]
-            total = len(all_sections)
+            # 2. Slide listesi oluştur — cover + sections + outro
+            raw_sections = [
+                {"type": "cover",   "text": script["intro"]["text"],  "image_prompt": script["intro"]["image_prompt"], "heading": title, "number": 0},
+            ]
+            for s in script["sections"]:
+                raw_sections.append({
+                    "type": "section",
+                    "text": s["text"],
+                    "image_prompt": s.get("image_prompt", req.topic),
+                    "heading": s.get("heading", f"Point {s['number']}"),
+                    "number": s["number"]
+                })
+            raw_sections.append({
+                "type": "outro",
+                "text": script["outro"]["text"],
+                "image_prompt": script["outro"]["image_prompt"],
+                "heading": "",
+                "number": 0
+            })
+
+            total = len(raw_sections)
             slides = []
 
-            # 3. Ses + görsel paralel üret
+            # 3. Her slide için ses + görsel paralel üret
             self._update("generating_assets", 15, f"0/{total} sections ready...")
 
-            for i, section in enumerate(all_sections):
-                text = section["text"]
-                image_prompt = section.get("image_prompt", req.topic)
-                full_prompt = f"{image_prompt}, {req.style}, high quality, 4K"
+            for i, section in enumerate(raw_sections):
+                full_prompt = f"{section['image_prompt']}, {req.style}, high quality, 4K"
                 audio_path = f"{self.output_dir}/audio_{i}.mp3"
 
                 audio_result, image_url = await asyncio.gather(
-                    text_to_speech(text, req.voice_id, audio_path),
+                    text_to_speech(section["text"], req.voice_id, audio_path),
                     generate_image(full_prompt)
                 )
 
                 progress = 15 + int((i + 1) / total * 60)
                 self._update("generating_assets", progress, f"{i+1}/{total} sections ready")
-                slides.append({"image_url": image_url, "audio_path": audio_result})
+                slides.append({
+                    "image_url": image_url,
+                    "audio_path": audio_result,
+                    "type": section["type"],
+                    "heading": section["heading"],
+                    "number": section["number"]
+                })
 
             # 4. Video birleştir
             self._update("assembling", 80, "Assembling video...")
-            final_path = await assemble_video(list(slides), self.output_dir, self.job_id)
+            final_path = await assemble_video(slides, self.output_dir, self.job_id, title)
 
-            # 5. Video URL döndür
+            # 5. URL döndür
             video_url = f"{BASE_URL}/videos/{self.job_id}/final_{self.job_id}.mp4"
             self._update("done", 100, "Video ready!", video_url=video_url)
 
