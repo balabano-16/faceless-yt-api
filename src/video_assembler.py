@@ -33,31 +33,20 @@ def validate_inputs(*paths):
             raise Exception(f"File is 0 bytes: {path}")
 
 def make_cover_slide(image_path: str, title: str, audio_path: str, output_path: str, duration: float):
-    """Kapak slaydı: büyük başlık + gradient overlay"""
+    """Kapak slaydı: Pillow ile YouTube tarzı tasarım"""
     validate_inputs(image_path, audio_path)
-    
-    # Başlığı FFmpeg için escape et
-    safe_title = title.replace("'", "\\'").replace(":", "\\:").replace("[", "\\[").replace("]", "\\]")
-    
-    font_size = 64
-    if len(title) > 40:
-        font_size = 48
-    if len(title) > 60:
-        font_size = 38
+    from src.thumbnail import create_youtube_cover
+
+    # Pillow ile kapak görseli oluştur
+    cover_path = image_path.replace(".jpg", "_cover.jpg")
+    create_youtube_cover(image_path, title, cover_path)
 
     cmd = [
         "ffmpeg", "-y",
-        "-loop", "1", "-i", image_path,
+        "-loop", "1", "-i", cover_path,
         "-i", audio_path,
-        "-filter_complex",
-        f"[0:v]scale=1280:720:force_original_aspect_ratio=increase,"
-        f"crop=1280:720,"
-        f"format=yuv420p,"
-        # Koyu gradient overlay
-        f"drawbox=x=0:y=ih-ih/2:w=iw:h=ih/2:color=black@0.7:t=fill,"
-        # Ana başlık
-        f"drawtext=text='{safe_title}':fontcolor=white:fontsize={font_size}:x=(w-text_w)/2:y=(h-text_h)/2+40:line_spacing=10:borderw=2:bordercolor=black[v]",
-        "-map", "[v]", "-map", "1:a",
+        "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p",
+        "-map", "0:v", "-map", "1:a",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
         "-pix_fmt", "yuv420p", "-c:a", "aac",
         "-shortest", "-t", str(duration + 0.5),
