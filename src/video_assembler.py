@@ -12,29 +12,6 @@ async def download_file(url: str, dest: str) -> str:
             f.write(resp.content)
     return dest
 
-def add_ken_burns(image_path: str, audio_path: str, output_path: str, duration: float):
-    """Tek slayt: görsel + ses + Ken Burns efekti"""
-    cmd = [
-        "ffmpeg", "-y",
-        "-loop", "1",
-        "-i", image_path,
-        "-i", audio_path,
-        "-filter_complex",
-        f"[0:v]scale=1920:1080:force_original_aspect_ratio=increase,"
-        f"crop=1920:1080,zoompan=z='min(zoom+0.0015,1.3)':d={int(duration*25)}:s=1920x1080[v]",
-        "-map", "[v]",
-        "-map", "1:a",
-        "-c:v", "libx264",
-        "-c:a", "aac",
-        "-shortest",
-        "-t", str(duration + 0.5),
-        output_path
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise Exception(f"FFmpeg hatası: {result.stderr[-500:]}")
-    return output_path
-
 def get_audio_duration(audio_path: str) -> float:
     cmd = [
         "ffprobe", "-v", "quiet",
@@ -47,6 +24,33 @@ def get_audio_duration(audio_path: str) -> float:
         return float(result.stdout.strip())
     except:
         return 5.0
+
+def add_ken_burns(image_path: str, audio_path: str, output_path: str, duration: float):
+    """Tek slayt: görsel + ses + Ken Burns efekti"""
+    cmd = [
+        "ffmpeg", "-y",
+        "-loop", "1",
+        "-i", image_path,
+        "-i", audio_path,
+        "-filter_complex",
+        f"[0:v]scale=1920:1080:force_original_aspect_ratio=increase,"
+        f"crop=1920:1080,"
+        f"format=yuv420p,"
+        f"zoompan=z='min(zoom+0.0015,1.3)':d={int(duration*25)}:s=1920x1080[v]",
+        "-map", "[v]",
+        "-map", "1:a",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-shortest",
+        "-t", str(duration + 0.5),
+        "-loglevel", "error",  # sadece gerçek hataları göster
+        output_path
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise Exception(f"FFmpeg slide error: {result.stderr[-300:]}")
+    return output_path
 
 def concat_videos(video_paths: list, output_path: str):
     """Tüm slayt videolarını birleştirir"""
@@ -61,22 +65,17 @@ def concat_videos(video_paths: list, output_path: str):
         "-safe", "0",
         "-i", list_file,
         "-c", "copy",
+        "-loglevel", "error",
         output_path
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if os.path.exists(list_file):
         os.remove(list_file)
     if result.returncode != 0:
-        raise Exception(f"Concat hatası: {result.stderr[-500:]}")
+        raise Exception(f"FFmpeg concat error: {result.stderr[-300:]}")
     return output_path
 
 async def assemble_video(slides: list, output_dir: str, job_id: str) -> str:
-    """
-    slides = [
-      {"image_url": "...", "audio_path": "..."},
-      ...
-    ]
-    """
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     slide_videos = []
 
