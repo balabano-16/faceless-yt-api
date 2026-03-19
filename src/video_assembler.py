@@ -32,15 +32,16 @@ def validate_inputs(*paths):
         if os.path.getsize(path) == 0:
             raise Exception(f"File is 0 bytes: {path}")
 
-def make_cover_slide(image_path: str, title: str, audio_path: str, output_path: str, duration: float):
-    """Kapak slaydı: Nano Banana görseli direkt kullan"""
+def make_slide(image_path: str, audio_path: str, output_path: str, duration: float, is_portrait: bool = False):
+    """Evrensel slide: yatay (1280x720) veya dikey (1080x1920)"""
     validate_inputs(image_path, audio_path)
-
+    w, h = (1080, 1920) if is_portrait else (1280, 720)
+    print(f"[DEBUG] make_slide: is_portrait={is_portrait}, size={w}x{h}")
     cmd = [
         "ffmpeg", "-y",
         "-loop", "1", "-i", image_path,
         "-i", audio_path,
-        "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p",
+        "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},format=yuv420p",
         "-map", "0:v", "-map", "1:a",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
         "-pix_fmt", "yuv420p", "-c:a", "aac",
@@ -49,57 +50,35 @@ def make_cover_slide(image_path: str, title: str, audio_path: str, output_path: 
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise Exception(f"Cover slide error: {result.stderr[-500:]}")
+        raise Exception(f"Slide error: {result.stderr[-500:]}")
     return output_path
 
-def make_section_slide(image_path: str, heading: str, number: int, audio_path: str, output_path: str, duration: float):
-    """Section slaydı: Nano Banana görseli direkt kullan"""
-    validate_inputs(image_path, audio_path)
-
+def merge_audio_to_video(video_path: str, audio_path: str, output_path: str):
+    """P-Video klibine ses ekler"""
+    validate_inputs(video_path, audio_path)
     cmd = [
         "ffmpeg", "-y",
-        "-loop", "1", "-i", image_path,
+        "-i", video_path,
         "-i", audio_path,
-        "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p",
-        "-map", "0:v", "-map", "1:a",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-        "-pix_fmt", "yuv420p", "-c:a", "aac",
-        "-shortest", "-t", str(duration + 0.5),
-        "-loglevel", "warning", output_path
+        "-map", "0:v",
+        "-map", "1:a",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-shortest",
+        "-loglevel", "warning",
+        output_path
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise Exception(f"Section slide error: {result.stderr[-500:]}")
-    return output_path
-
-
-def make_simple_slide(image_path: str, audio_path: str, output_path: str, duration: float):
-    """Outro slaydı: sade"""
-    validate_inputs(image_path, audio_path)
-    cmd = [
-        "ffmpeg", "-y",
-        "-loop", "1", "-i", image_path,
-        "-i", audio_path,
-        "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p",
-        "-map", "0:v", "-map", "1:a",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-        "-pix_fmt", "yuv420p", "-c:a", "aac",
-        "-shortest", "-t", str(duration + 0.5),
-        "-loglevel", "warning", output_path
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise Exception(f"Simple slide error: {result.stderr[-500:]}")
+        raise Exception(f"Audio merge error: {result.stderr[-300:]}")
     return output_path
 
 def concat_with_transitions(video_paths: list, output_path: str):
-    """Videolar arası fade-to-black geçiş efekti"""
     if len(video_paths) == 1:
         import shutil
         shutil.copy(video_paths[0], output_path)
         return output_path
 
-    # Önce tüm videolar aynı formata çevir, sonra birleştir
     list_file = output_path.replace(".mp4", "_list.txt")
     with open(list_file, "w") as f:
         for vp in video_paths:
@@ -123,10 +102,10 @@ def concat_with_transitions(video_paths: list, output_path: str):
 async def assemble_video(slides: list, output_dir: str, job_id: str, title: str = "", is_portrait: bool = False) -> str:
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     slide_videos = []
+    print(f"[DEBUG] assemble_video: is_portrait={is_portrait}, slides={len(slides)}")
 
     for i, slide in enumerate(slides):
         try:
-            slide_type = slide.get("type", "section")
             slide_video = f"{output_dir}/slide_{i}.mp4"
 
             if slide.get("is_video_clip"):
@@ -143,7 +122,7 @@ async def assemble_video(slides: list, output_dir: str, job_id: str, title: str 
                 make_slide(img_path, slide["audio_path"], slide_video, duration, is_portrait)
 
             slide_videos.append(slide_video)
-            print(f"[DEBUG] Slide {i} ({slide_type}) done")
+            print(f"[DEBUG] Slide {i} done")
         except Exception as e:
             print(f"[ERROR] Slide {i} failed: {traceback.format_exc()}")
             raise
@@ -152,24 +131,3 @@ async def assemble_video(slides: list, output_dir: str, job_id: str, title: str 
     concat_with_transitions(slide_videos, final_path)
     print(f"[DEBUG] Final video: {final_path} — {os.path.getsize(final_path)} bytes")
     return final_path
-
-def merge_audio_to_video(video_path: str, audio_path: str, output_path: str, duration=None):
-    """P-Video klibine ses ekler"""
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", video_path,
-        "-i", audio_path,
-        "-map", "0:v",
-        "-map", "1:a",
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-shortest",
-        "-loglevel", "warning",
-        output_path
-    ]
-    if duration:
-        cmd += ["-t", str(duration)]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise Exception(f"Audio merge error: {result.stderr[-300:]}")
-    return output_path

@@ -102,7 +102,9 @@ class VideoPipeline:
             self._update("generating_assets", 15, f"0/{total} sections ready...")
 
             # Format ayarı
-            is_portrait = getattr(req, 'format', 'landscape') == 'portrait'
+            req_format = req.format if hasattr(req, 'format') and req.format else 'landscape'
+            is_portrait = req_format == 'portrait'
+            print(f'[DEBUG] Format: {req_format}, is_portrait: {is_portrait}')
             aspect_ratio = "9:16" if is_portrait else "16:9"
             format_hint = "vertical 9:16 short-form video, portrait orientation" if is_portrait else "horizontal 16:9 YouTube video, landscape"
 
