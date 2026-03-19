@@ -39,10 +39,8 @@ class VideoPipeline:
             scene = f"a dramatic cinematic scene representing {topic}, powerful composition, epic atmosphere"
 
         return (
-            f"{scene}, "
-            f"ultra high quality, 8K, cinematic photography, dramatic lighting, "
-            f"professional color grading, sharp focus, epic composition, "
-            f"no text, no watermark, photorealistic"
+            f"Eye-catching YouTube thumbnail, {scene}, "
+            f"title text: {title}"
         )
 
     def _update(self, status: str, progress: int, message: str, video_url=None, error=None):
