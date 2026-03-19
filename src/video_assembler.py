@@ -33,17 +33,12 @@ def validate_inputs(*paths):
             raise Exception(f"File is 0 bytes: {path}")
 
 def make_cover_slide(image_path: str, title: str, audio_path: str, output_path: str, duration: float):
-    """Kapak slaydı: Pillow ile YouTube tarzı tasarım"""
+    """Kapak slaydı: Nano Banana görseli direkt kullan"""
     validate_inputs(image_path, audio_path)
-    from src.thumbnail import create_youtube_cover
-
-    # Pillow ile kapak görseli oluştur
-    cover_path = image_path.replace(".jpg", "_cover.jpg")
-    create_youtube_cover(image_path, title, cover_path)
 
     cmd = [
         "ffmpeg", "-y",
-        "-loop", "1", "-i", cover_path,
+        "-loop", "1", "-i", image_path,
         "-i", audio_path,
         "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p",
         "-map", "0:v", "-map", "1:a",
@@ -58,46 +53,12 @@ def make_cover_slide(image_path: str, title: str, audio_path: str, output_path: 
     return output_path
 
 def make_section_slide(image_path: str, heading: str, number: int, audio_path: str, output_path: str, duration: float):
-    """Section slaydı: Pillow ile üstte numara + başlık bar"""
+    """Section slaydı: Nano Banana görseli direkt kullan"""
     validate_inputs(image_path, audio_path)
-    from PIL import Image, ImageDraw, ImageFont
-
-    img = Image.open(image_path).convert("RGBA")
-    img = img.resize((1280, 720), Image.LANCZOS)
-
-    def get_font(size):
-        font_paths = [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-            "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
-        ]
-        for fp in font_paths:
-            if os.path.exists(fp):
-                return ImageFont.truetype(fp, size)
-        return ImageFont.load_default()
-
-    # Üst bar overlay
-    overlay = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
-    ov_draw = ImageDraw.Draw(overlay)
-    ov_draw.rectangle([0, 0, 1280, 90], fill=(0, 0, 0, 185))
-    ov_draw.rectangle([0, 0, 6, 90], fill=(168, 85, 247, 255))
-    img = Image.alpha_composite(img, overlay).convert("RGB")
-    draw = ImageDraw.Draw(img)
-
-    num_font = get_font(56)
-    head_font_size = 38 if len(heading) < 40 else 30 if len(heading) < 60 else 24
-    head_font = get_font(head_font_size)
-
-    draw.text((20, 15), str(number), font=num_font, fill=(168, 85, 247))
-    draw.text((88, (90 - head_font_size) // 2), heading, font=head_font, fill=(255, 255, 255))
-
-    section_path = image_path.replace(".jpg", "_section.jpg")
-    img.save(section_path, "JPEG", quality=95)
 
     cmd = [
         "ffmpeg", "-y",
-        "-loop", "1", "-i", section_path,
+        "-loop", "1", "-i", image_path,
         "-i", audio_path,
         "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p",
         "-map", "0:v", "-map", "1:a",
@@ -110,6 +71,7 @@ def make_section_slide(image_path: str, heading: str, number: int, audio_path: s
     if result.returncode != 0:
         raise Exception(f"Section slide error: {result.stderr[-500:]}")
     return output_path
+
 
 def make_simple_slide(image_path: str, audio_path: str, output_path: str, duration: float):
     """Outro slaydı: sade"""
@@ -164,19 +126,28 @@ async def assemble_video(slides: list, output_dir: str, job_id: str, title: str 
 
     for i, slide in enumerate(slides):
         try:
-            img_path = f"{output_dir}/img_{i}.jpg"
-            slide_video = f"{output_dir}/slide_{i}.mp4"
-            await download_file(slide["image_url"], img_path)
-            duration = get_audio_duration(slide["audio_path"])
-
             slide_type = slide.get("type", "section")
-            
-            if slide_type == "cover":
-                make_cover_slide(img_path, title or "AI Video", slide["audio_path"], slide_video, duration)
-            elif slide_type == "section":
-                make_section_slide(img_path, slide.get("heading", ""), slide.get("number", i), slide["audio_path"], slide_video, duration)
+            slide_video = f"{output_dir}/slide_{i}.mp4"
+
+            # Video klip modu — P-Video'dan gelen mp4
+            if slide.get("video_url"):
+                print(f"[DEBUG] Slide {i}: using P-Video clip")
+                clip_path = f"{output_dir}/clip_{i}.mp4"
+                await download_file(slide["video_url"], clip_path)
+                # Ses ekle
+                merge_audio_to_video(clip_path, slide["audio_path"], slide_video, duration=None)
             else:
-                make_simple_slide(img_path, slide["audio_path"], slide_video, duration)
+                # Görsel modu — mevcut akış
+                img_path = f"{output_dir}/img_{i}.jpg"
+                await download_file(slide["image_url"], img_path)
+                duration = get_audio_duration(slide["audio_path"])
+
+                if slide_type == "cover":
+                    make_cover_slide(img_path, title or "AI Video", slide["audio_path"], slide_video, duration)
+                elif slide_type == "section":
+                    make_section_slide(img_path, slide.get("heading", ""), slide.get("number", i), slide["audio_path"], slide_video, duration)
+                else:
+                    make_simple_slide(img_path, slide["audio_path"], slide_video, duration)
 
             slide_videos.append(slide_video)
             print(f"[DEBUG] Slide {i} ({slide_type}) done")
@@ -188,3 +159,24 @@ async def assemble_video(slides: list, output_dir: str, job_id: str, title: str 
     concat_with_transitions(slide_videos, final_path)
     print(f"[DEBUG] Final video: {final_path} — {os.path.getsize(final_path)} bytes")
     return final_path
+
+def merge_audio_to_video(video_path: str, audio_path: str, output_path: str, duration=None):
+    """P-Video klibine ses ekler"""
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", video_path,
+        "-i", audio_path,
+        "-map", "0:v",
+        "-map", "1:a",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-shortest",
+        "-loglevel", "warning",
+        output_path
+    ]
+    if duration:
+        cmd += ["-t", str(duration)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise Exception(f"Audio merge error: {result.stderr[-300:]}")
+    return output_path
