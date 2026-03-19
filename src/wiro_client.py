@@ -121,3 +121,39 @@ async def generate_script_text(prompt: str, system: str = "", max_tokens: int = 
                 raise Exception("Wiro LLM task cancelled")
             await asyncio.sleep(3)
     raise Exception("Wiro LLM timeout")
+
+async def generate_video_clip(prompt: str, image_url: str = "", duration: int = 5) -> str:
+    """
+    P-Video ile video klip üretir.
+    image_url varsa image-to-video, yoksa text-to-video.
+    CDN URL döner (.mp4)
+    """
+    data = {
+        "prompt": prompt,
+        "ratio": "16:9",
+        "duration": str(duration),
+        "resolution": "720p",
+        "fps": "24",
+        "seed": "0",
+        "saveAudio": "false",
+        "draft": "false",
+        "promptUpsampling": "true",
+    }
+    if image_url:
+        data["inputImage"] = image_url
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(
+            f"{RUN_BASE}/pruna/p-video",
+            headers=_auth_headers(),
+            data=data
+        )
+        resp.raise_for_status()
+        result = resp.json()
+
+    taskid = result.get("taskid")
+    if not taskid:
+        raise Exception(f"P-Video: no taskid in response: {result}")
+
+    # Video üretimi daha uzun sürebilir — 300s timeout
+    return await _poll_task(str(taskid), timeout=300)

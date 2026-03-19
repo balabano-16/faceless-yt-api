@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from src.store import job_store
 from src.script_generator import generate_script
-from src.wiro_client import generate_image
+from src.wiro_client import generate_image, generate_video_clip
 from src.elevenlabs_client import text_to_speech
 from src.video_assembler import assemble_video
 
@@ -106,20 +106,35 @@ class VideoPipeline:
             aspect_ratio = "9:16" if is_portrait else "16:9"
             format_hint = "vertical 9:16 short-form video, portrait orientation" if is_portrait else "horizontal 16:9 YouTube video, landscape"
 
+            use_video = getattr(req, 'use_video', False)
+
             for i, section in enumerate(raw_sections):
                 full_prompt = f"{section['image_prompt']}, {format_hint}, {req.style}, high quality, 4K"
                 audio_path = f"{self.output_dir}/audio_{i}.mp3"
 
-                audio_result, image_url = await asyncio.gather(
-                    text_to_speech(section["text"], req.voice_id, audio_path),
-                    generate_image(full_prompt, aspect_ratio=aspect_ratio)
-                )
+                if use_video:
+                    # P-Video modu: önce görsel üret, sonra video klibe çevir
+                    audio_result, image_url = await asyncio.gather(
+                        text_to_speech(section["text"], req.voice_id, audio_path),
+                        generate_image(full_prompt, aspect_ratio=aspect_ratio)
+                    )
+                    video_clip_url = await generate_video_clip(full_prompt, image_url=image_url, duration=5)
+                    slide_url = video_clip_url
+                    is_video_clip = True
+                else:
+                    # Normal görsel modu
+                    audio_result, slide_url = await asyncio.gather(
+                        text_to_speech(section["text"], req.voice_id, audio_path),
+                        generate_image(full_prompt, aspect_ratio=aspect_ratio)
+                    )
+                    is_video_clip = False
 
                 progress = 15 + int((i + 1) / total * 60)
                 self._update("generating_assets", progress, f"{i+1}/{total} sections ready")
                 slides.append({
-                    "image_url": image_url,
+                    "image_url": slide_url,
                     "audio_path": audio_result,
+                    "is_video_clip": is_video_clip,
                     "type": section["type"],
                     "heading": section["heading"],
                     "number": section["number"]

@@ -129,25 +129,18 @@ async def assemble_video(slides: list, output_dir: str, job_id: str, title: str 
             slide_type = slide.get("type", "section")
             slide_video = f"{output_dir}/slide_{i}.mp4"
 
-            # Video klip modu — P-Video'dan gelen mp4
-            if slide.get("video_url"):
-                print(f"[DEBUG] Slide {i}: using P-Video clip")
+            if slide.get("is_video_clip"):
+                # P-Video modu: mp4 klip indir, ses ekle
+                print(f"[DEBUG] Slide {i}: P-Video clip mode")
                 clip_path = f"{output_dir}/clip_{i}.mp4"
-                await download_file(slide["video_url"], clip_path)
-                # Ses ekle
-                merge_audio_to_video(clip_path, slide["audio_path"], slide_video, duration=None)
+                await download_file(slide["image_url"], clip_path)
+                merge_audio_to_video(clip_path, slide["audio_path"], slide_video)
             else:
-                # Görsel modu — mevcut akış
+                # Görsel modu: jpg indir, FFmpeg ile video yap
                 img_path = f"{output_dir}/img_{i}.jpg"
                 await download_file(slide["image_url"], img_path)
                 duration = get_audio_duration(slide["audio_path"])
-
-                if slide_type == "cover":
-                    make_cover_slide(img_path, title or "AI Video", slide["audio_path"], slide_video, duration)
-                elif slide_type == "section":
-                    make_section_slide(img_path, slide.get("heading", ""), slide.get("number", i), slide["audio_path"], slide_video, duration)
-                else:
-                    make_simple_slide(img_path, slide["audio_path"], slide_video, duration)
+                make_slide(img_path, slide["audio_path"], slide_video, duration, is_portrait)
 
             slide_videos.append(slide_video)
             print(f"[DEBUG] Slide {i} ({slide_type}) done")
