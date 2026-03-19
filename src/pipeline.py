@@ -39,28 +39,21 @@ class VideoPipeline:
             # 3. Ses + görsel paralel üret (her bölüm için)
             self._update("generating_assets", 15, f"0/{total} bölüm hazırlanıyor...")
 
-            async def process_section(i, section):
+            slides = []
+            for i, section in enumerate(all_sections):
                 text = section["text"]
                 image_prompt = section.get("image_prompt", req.topic)
-
-                # style ekle
                 full_prompt = f"{image_prompt}, {req.style}, high quality, 4K"
-
                 audio_path = f"{self.output_dir}/audio_{i}.mp3"
 
-                # Ses ve görsel paralel
-                audio_task = text_to_speech(text, req.voice_id, audio_path)
-                image_task = generate_image(full_prompt)
-
-                audio_result, image_url = await asyncio.gather(audio_task, image_task)
+                # Ses ve görseli sıralı üret (rate limit için)
+                audio_result = await text_to_speech(text, req.voice_id, audio_path)
+                await asyncio.sleep(1)  # ElevenLabs rate limit koruması
+                image_url = await generate_image(full_prompt)
 
                 progress = 15 + int((i + 1) / total * 60)
-                self._update("generating_assets", progress, f"{i+1}/{total} bölüm hazır")
-
-                return {"image_url": image_url, "audio_path": audio_result}
-
-            tasks = [process_section(i, s) for i, s in enumerate(all_sections)]
-            slides = await asyncio.gather(*tasks)
+                self._update("generating_assets", progress, f"{i+1}/{total} section ready")
+                slides.append({"image_url": image_url, "audio_path": audio_result})
 
             # 4. Video birleştir
             self._update("assembling", 80, "Video birleştiriliyor...")
