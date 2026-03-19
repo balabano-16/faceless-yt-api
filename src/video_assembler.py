@@ -18,12 +18,20 @@ async def download_file(url: str, dest: str) -> str:
     return dest
 
 def get_audio_duration(audio_path: str) -> float:
-    cmd = ["ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", audio_path]
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        audio_path
+    ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     try:
-        return float(result.stdout.strip())
+        duration = float(result.stdout.strip())
+        print(f"[DEBUG] Audio duration: {duration:.2f}s — {os.path.basename(audio_path)}")
+        return duration
     except:
-        return 5.0
+        print(f"[WARN] Could not get duration for {audio_path}, defaulting to 6s")
+        return 6.0
 
 def validate_inputs(*paths):
     for path in paths:
@@ -36,16 +44,22 @@ def make_slide(image_path: str, audio_path: str, output_path: str, duration: flo
     """Evrensel slide: yatay (1280x720) veya dikey (1080x1920)"""
     validate_inputs(image_path, audio_path)
     w, h = (1080, 1920) if is_portrait else (1280, 720)
-    print(f"[DEBUG] make_slide: is_portrait={is_portrait}, size={w}x{h}")
+    # Ses süresine 0.3s buffer ekle — kesilmeyi önler
+    video_duration = duration + 0.3
+    print(f"[DEBUG] make_slide: {w}x{h}, audio={duration:.2f}s, video={video_duration:.2f}s")
     cmd = [
         "ffmpeg", "-y",
-        "-loop", "1", "-i", image_path,
+        "-loop", "1",
+        "-framerate", "24",
+        "-t", str(video_duration),  # önce görsel süresini belirle
+        "-i", image_path,
         "-i", audio_path,
         "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},format=yuv420p",
         "-map", "0:v", "-map", "1:a",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-        "-pix_fmt", "yuv420p", "-c:a", "aac",
-        "-shortest", "-t", str(duration + 0.5),
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-ar", "44100", "-b:a", "128k",
+        "-t", str(video_duration),
         "-loglevel", "warning", output_path
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
