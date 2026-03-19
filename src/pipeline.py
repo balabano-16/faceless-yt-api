@@ -15,6 +15,36 @@ class VideoPipeline:
         self.job_id = job_id
         self.output_dir = f"{OUTPUT_BASE}/{job_id}"
 
+    def _make_cover_prompt(self, topic: str, title: str, style: str) -> str:
+        """
+        Nano Banana için YouTube kapak görseli prompt'u.
+        Sinematik, dramatik, yüz göstermeyen ama konuya uygun.
+        """
+        topic_lower = topic.lower()
+
+        # Konuya göre sahne seç
+        if any(w in topic_lower for w in ["habit", "productiv", "routine", "morning", "success"]):
+            scene = "a person silhouette standing at the top of a mountain at golden hour, arms wide open, sun rays breaking through clouds"
+        elif any(w in topic_lower for w in ["smart", "brain", "psycholog", "mind", "think", "genius"]):
+            scene = "a glowing human brain surrounded by floating light particles and neural connections in a dark cosmic space"
+        elif any(w in topic_lower for w in ["money", "rich", "wealth", "finance", "invest"]):
+            scene = "a rain of golden coins falling in a dark dramatic background with light rays, cinematic atmosphere"
+        elif any(w in topic_lower for w in ["ai", "tech", "future", "robot", "digital"]):
+            scene = "a futuristic glowing neural network with blue and purple light streams in a dark background, hyper realistic"
+        elif any(w in topic_lower for w in ["health", "fit", "body", "workout", "exercise"]):
+            scene = "a dramatic silhouette of an athletic person training at sunset, strong backlighting, cinematic"
+        elif any(w in topic_lower for w in ["relation", "love", "social", "people", "friend"]):
+            scene = "two silhouettes facing each other with warm golden light between them, bokeh background, cinematic"
+        else:
+            scene = f"a dramatic cinematic scene representing {topic}, powerful composition, epic atmosphere"
+
+        return (
+            f"{scene}, "
+            f"ultra high quality, 8K, cinematic photography, dramatic lighting, "
+            f"professional color grading, sharp focus, epic composition, "
+            f"no text, no watermark, photorealistic"
+        )
+
     def _update(self, status: str, progress: int, message: str, video_url=None, error=None):
         job_store[self.job_id].update({
             "status": status,
@@ -33,9 +63,12 @@ class VideoPipeline:
             script = await generate_script(req.topic, req.sections, req.language)
             title = script.get("title", req.topic)
 
+            # Kapak için özel prompt — Nano Banana'nın güçlü olduğu sinematik stil
+            cover_prompt = self._make_cover_prompt(req.topic, title, req.style)
+
             # 2. Slide listesi oluştur — cover + sections + outro
             raw_sections = [
-                {"type": "cover",   "text": script["intro"]["text"],  "image_prompt": script["intro"]["image_prompt"], "heading": title, "number": 0},
+                {"type": "cover", "text": script["intro"]["text"], "image_prompt": cover_prompt, "heading": title, "number": 0},
             ]
             for s in script["sections"]:
                 raw_sections.append({
