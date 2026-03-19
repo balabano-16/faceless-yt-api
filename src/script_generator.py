@@ -44,21 +44,30 @@ async def _poll_task(taskid: str, timeout: int = 120) -> str:
             print(f"[DEBUG] Gemini task status: {status}")
             if status == "task_postprocess_end":
                 outputs = task.get("outputs", [])
-                print(f"[DEBUG] Gemini outputs: {outputs}")
+                print(f"[DEBUG] Gemini outputs count: {len(outputs)}")
                 if outputs:
-                    url = outputs[0].get("url", "")
-                    print(f"[DEBUG] Gemini output URL: {url}")
+                    out = outputs[0]
+                    # content.raw içinde JSON var
+                    content = out.get("content", {})
+                    if isinstance(content, dict):
+                        raw = content.get("raw", "")
+                        if raw:
+                            print(f"[DEBUG] Got raw from content: {raw[:200]}")
+                            return raw
+                        # answer listesi içinde olabilir
+                        answer = content.get("answer", [])
+                        if answer:
+                            print(f"[DEBUG] Got answer: {str(answer[0])[:200]}")
+                            return answer[0] if isinstance(answer[0], str) else str(answer[0])
                     # URL ise fetch et
-                    if url.startswith("http"):
+                    url = out.get("url", "")
+                    if url and url.startswith("http"):
                         async with httpx.AsyncClient(timeout=30) as c:
                             r = await c.get(url)
-                            text = r.text
-                            print(f"[DEBUG] Gemini fetched text (first 500): {text[:500]}")
-                            return text
-                    return url
-                # debug output kontrol et
+                            return r.text
+                    return str(out)
                 debug = task.get("debugoutput", "")
-                print(f"[DEBUG] Gemini debugoutput (first 500): {debug[:500]}")
+                print(f"[DEBUG] Gemini debugoutput: {debug[:200]}")
                 return debug
             elif status == "task_cancel":
                 raise Exception("Gemini task cancelled")
