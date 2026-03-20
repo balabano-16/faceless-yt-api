@@ -125,19 +125,19 @@ Return ONLY valid JSON, no markdown fences, no explanation:
 {{
   "title": "catchy engaging video title",
   "intro": {{
-    "text": "25 word punchy intro that immediately hooks the viewer about {topic}",
+    "text": "MAXIMUM 20 words. Hook the viewer immediately about {topic}.",
     "image_prompt": "cinematic wide establishing shot for {topic}, dramatic lighting, 4K"
   }},
   "sections": [
     {{
       "number": 1,
       "heading": "Unique specific point heading",
-      "text": "40-50 word unique narration for this specific point. Short, punchy, engaging. Never repeat content from other sections.",
+      "text": "MAXIMUM 30 words. One punchy sentence about this specific point. No fluff.",
       "image_prompt": "specific cinematic image representing this unique point, dramatic lighting"
     }}
   ],
   "outro": {{
-    "text": "15 word call to action to like and subscribe",
+    "text": "MAXIMUM 15 words. Simple call to action.",
     "image_prompt": "motivational cinematic outro scene, dark background, inspiring atmosphere"
   }}
 }}
@@ -150,7 +150,7 @@ IMPORTANT: Generate exactly {sections} sections. Each section must be completely
             headers=_auth_headers(),
             data={
                 "prompt": prompt,
-                "maxOutputTokens": 4000,
+                "maxOutputTokens": 3000,
                 "temperature": "0.9",
                 "thinkingBudget": 0,
             }
@@ -172,6 +172,8 @@ IMPORTANT: Generate exactly {sections} sections. Each section must be completely
         # Section sayısını kontrol et
         actual_sections = result.get("sections", [])
         print(f"[DEBUG] Parsed script with {len(actual_sections)} sections")
+        # Metinleri kırp — Gemini limiti görmezden gelebilir
+        result = _truncate_script(result)
         if len(actual_sections) >= sections:
             return result
         # Az section geldiyse fallback ile doldur
@@ -187,7 +189,30 @@ IMPORTANT: Generate exactly {sections} sections. Each section must be completely
         return result
 
     print(f"[WARN] JSON parse failed, using fallback")
-    return _fallback_script(topic, sections)
+    return _truncate_script(_fallback_script(topic, sections))
+
+def _truncate_text(text: str, max_words: int) -> str:
+    """Metni max_words kelimeye kırp, cümle ortasında kesme"""
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    truncated = " ".join(words[:max_words])
+    # Son noktalama işaretinde bitir
+    for punct in [". ", "! ", "? "]:
+        last = truncated.rfind(punct)
+        if last > len(truncated) // 2:
+            return truncated[:last + 1]
+    return truncated + "."
+
+def _truncate_script(script: dict, section_max: int = 30, intro_max: int = 20, outro_max: int = 15) -> dict:
+    """Tüm script metinlerini kırp"""
+    if "intro" in script:
+        script["intro"]["text"] = _truncate_text(script["intro"]["text"], intro_max)
+    for s in script.get("sections", []):
+        s["text"] = _truncate_text(s["text"], section_max)
+    if "outro" in script:
+        script["outro"]["text"] = _truncate_text(script["outro"]["text"], outro_max)
+    return script
 
 def _fallback_script(topic: str, sections: int) -> dict:
     section_topics = [
