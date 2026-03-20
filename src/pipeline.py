@@ -102,45 +102,52 @@ class VideoPipeline:
             self._update("generating_assets", 15, f"0/{total} sections ready...")
 
             # Format ayarı
-            req_format = req.format if hasattr(req, 'format') and req.format else 'landscape'
+            print(f'[DEBUG] Full request: topic={req.topic}, format={getattr(req, "format", "NOT_SET")}, use_video={getattr(req, "use_video", False)}')
+            req_format = str(req.format).lower().strip() if hasattr(req, 'format') and req.format else 'landscape'
             is_portrait = req_format == 'portrait'
-            print(f'[DEBUG] Format: {req_format}, is_portrait: {is_portrait}')
+            print(f'[DEBUG] Format parsed: "{req_format}", is_portrait: {is_portrait}')
             aspect_ratio = "9:16" if is_portrait else "16:9"
             format_hint = "vertical 9:16 short-form video, portrait orientation" if is_portrait else "horizontal 16:9 YouTube video, landscape"
 
             use_video = getattr(req, 'use_video', False)
+            self._update("generating_assets", 15, f"Generating all {total} sections in parallel...")
 
-            for i, section in enumerate(raw_sections):
+            async def process_section(i, section):
                 full_prompt = f"{section['image_prompt']}, {format_hint}, {req.style}, high quality, 4K"
                 audio_path = f"{self.output_dir}/audio_{i}.mp3"
 
                 if use_video:
-                    # P-Video modu: önce görsel üret, sonra video klibe çevir
+                    # P-Video: görsel + ses paralel, sonra video klip
                     audio_result, image_url = await asyncio.gather(
                         text_to_speech(section["text"], req.voice_id, audio_path),
                         generate_image(full_prompt, aspect_ratio=aspect_ratio)
                     )
-                    video_clip_url = await generate_video_clip(full_prompt, image_url=image_url, duration=5)
-                    slide_url = video_clip_url
+                    slide_url = await generate_video_clip(full_prompt, image_url=image_url, duration=5)
                     is_video_clip = True
                 else:
-                    # Normal görsel modu
+                    # Görsel modu: ses + görsel paralel
                     audio_result, slide_url = await asyncio.gather(
                         text_to_speech(section["text"], req.voice_id, audio_path),
                         generate_image(full_prompt, aspect_ratio=aspect_ratio)
                     )
                     is_video_clip = False
 
-                progress = 15 + int((i + 1) / total * 60)
-                self._update("generating_assets", progress, f"{i+1}/{total} sections ready")
-                slides.append({
+                print(f"[DEBUG] Section {i+1}/{total} done")
+                return {
                     "image_url": slide_url,
                     "audio_path": audio_result,
                     "is_video_clip": is_video_clip,
                     "type": section["type"],
                     "heading": section["heading"],
                     "number": section["number"]
-                })
+                }
+
+            # Tüm section'ları aynı anda üret
+            slides = list(await asyncio.gather(*[
+                process_section(i, section)
+                for i, section in enumerate(raw_sections)
+            ]))
+            self._update("generating_assets", 75, f"All {total} sections ready!")
 
             # 4. Video birleştir
             self._update("assembling", 80, "Assembling video...")
