@@ -44,8 +44,8 @@ def make_slide(image_path: str, audio_path: str, output_path: str, duration: flo
     """Evrensel slide: yatay (1280x720) veya dikey (1080x1920)"""
     validate_inputs(image_path, audio_path)
     w, h = (1080, 1920) if is_portrait else (1280, 720)
-    # Ses süresine 0.3s buffer ekle — kesilmeyi önler
-    video_duration = duration + 0.3
+    # Ses süresine 1.0s buffer ekle — geçiş için nefes boşluğu
+    video_duration = duration + 1.0
     print(f"[DEBUG] make_slide: {w}x{h}, audio={duration:.2f}s, video={video_duration:.2f}s")
     cmd = [
         "ffmpeg", "-y",

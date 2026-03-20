@@ -125,7 +125,7 @@ class VideoPipeline:
                     # Ses süresini ölç, P-Video'ya o süreyi ver (max 10s)
                     from src.video_assembler import get_audio_duration
                     audio_dur = get_audio_duration(audio_result)
-                    clip_duration = min(int(audio_dur) + 1, 10)
+                    clip_duration = min(int(audio_dur) + 2, 10)
                     print(f"[DEBUG] Audio duration: {audio_dur:.1f}s, clip duration: {clip_duration}s")
                     slide_url = await generate_video_clip(full_prompt, image_url=image_url, duration=clip_duration)
                     is_video_clip = True
