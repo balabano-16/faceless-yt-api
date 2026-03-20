@@ -56,7 +56,7 @@ def make_slide(image_path: str, audio_path: str, output_path: str, duration: flo
         "-i", audio_path,
         "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},format=yuv420p",
         "-map", "0:v", "-map", "1:a",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "32", "-maxrate", "1000k", "-bufsize", "2000k",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-ar", "44100", "-b:a", "128k",
         "-t", str(video_duration),
