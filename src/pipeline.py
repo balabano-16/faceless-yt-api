@@ -117,12 +117,17 @@ class VideoPipeline:
                 audio_path = f"{self.output_dir}/audio_{i}.mp3"
 
                 if use_video:
-                    # P-Video: görsel + ses paralel, sonra video klip
+                    # P-Video: önce ses üret, süreyi öğren, sonra o sürede video üret
                     audio_result, image_url = await asyncio.gather(
                         text_to_speech(section["text"], req.voice_id, audio_path),
                         generate_image(full_prompt, aspect_ratio=aspect_ratio)
                     )
-                    slide_url = await generate_video_clip(full_prompt, image_url=image_url, duration=5)
+                    # Ses süresini ölç, P-Video'ya o süreyi ver (max 10s)
+                    from src.video_assembler import get_audio_duration
+                    audio_dur = get_audio_duration(audio_result)
+                    clip_duration = min(int(audio_dur) + 1, 10)
+                    print(f"[DEBUG] Audio duration: {audio_dur:.1f}s, clip duration: {clip_duration}s")
+                    slide_url = await generate_video_clip(full_prompt, image_url=image_url, duration=clip_duration)
                     is_video_clip = True
                 else:
                     # Görsel modu: ses + görsel paralel

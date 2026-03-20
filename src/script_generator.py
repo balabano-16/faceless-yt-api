@@ -125,19 +125,19 @@ Return ONLY valid JSON, no markdown fences, no explanation:
 {{
   "title": "catchy engaging video title",
   "intro": {{
-    "text": "35 word engaging intro that hooks the viewer about {topic}",
+    "text": "25 word punchy intro that immediately hooks the viewer about {topic}",
     "image_prompt": "cinematic wide establishing shot for {topic}, dramatic lighting, 4K"
   }},
   "sections": [
     {{
       "number": 1,
       "heading": "Unique specific point heading",
-      "text": "70 word unique detailed narration for this specific point. Make it informative and engaging. Never repeat content from other sections.",
+      "text": "40-50 word unique narration for this specific point. Short, punchy, engaging. Never repeat content from other sections.",
       "image_prompt": "specific cinematic image representing this unique point, dramatic lighting"
     }}
   ],
   "outro": {{
-    "text": "25 word call to action encouraging likes and subscribe",
+    "text": "15 word call to action to like and subscribe",
     "image_prompt": "motivational cinematic outro scene, dark background, inspiring atmosphere"
   }}
 }}
