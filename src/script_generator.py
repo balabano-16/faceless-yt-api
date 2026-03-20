@@ -192,19 +192,21 @@ IMPORTANT: Generate exactly {sections} sections. Each section must be completely
     return _truncate_script(_fallback_script(topic, sections))
 
 def _truncate_text(text: str, max_words: int) -> str:
-    """Metni max_words kelimeye kırp, cümle ortasında kesme"""
+    """Metni max_words kelimeye kırp"""
     words = text.split()
-    if len(words) <= max_words:
+    original_count = len(words)
+    if original_count <= max_words:
+        print(f"[DEBUG] No truncation needed: {original_count} words (limit {max_words})")
         return text
-    truncated = " ".join(words[:max_words])
-    # Son noktalama işaretinde bitir
-    for punct in [". ", "! ", "? "]:
-        last = truncated.rfind(punct)
-        if last > len(truncated) // 2:
-            return truncated[:last + 1]
-    return truncated + "."
+    # Direkt kes
+    result = " ".join(words[:max_words])
+    # Noktalama ile bitir
+    if not result[-1] in ".!?":
+        result += "."
+    print(f"[DEBUG] Truncated: {original_count} → {len(result.split())} words: {result[:60]}")
+    return result
 
-def _truncate_script(script: dict, section_max: int = 30, intro_max: int = 20, outro_max: int = 15) -> dict:
+def _truncate_script(script: dict, section_max: int = 22, intro_max: int = 15, outro_max: int = 12) -> dict:
     """Tüm script metinlerini kırp"""
     if "intro" in script:
         script["intro"]["text"] = _truncate_text(script["intro"]["text"], intro_max)
