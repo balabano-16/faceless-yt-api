@@ -45,7 +45,10 @@ async def _poll_task(taskid: str, timeout: int = 300) -> str:
                 outputs = task.get("outputs", [])
                 if outputs:
                     return outputs[0]["url"]
-                raise Exception("Task completed but no outputs found")
+                # outputs geç dolabilir — 3s bekleyip tekrar dene
+                print(f"[WARN] task_postprocess_end but no outputs for taskid={taskid}, retrying in 3s...")
+                await asyncio.sleep(3)
+                continue
             elif status == "task_cancel":
                 raise Exception("Wiro task was cancelled")
             await asyncio.sleep(3)

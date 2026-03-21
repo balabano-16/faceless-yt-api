@@ -50,8 +50,9 @@ async def _poll_task(taskid: str, timeout: int = 120) -> str:
                 outputs = task.get("outputs", [])
                 if outputs:
                     return outputs[0]["url"]
-                # Bazen outputs geç dolabilir, bir kez daha dene
-                await asyncio.sleep(2)
+                # outputs boş — 3s bekleyip tekrar dene
+                print(f"[WARN] TTS task_postprocess_end but no outputs, waiting 3s...")
+                await asyncio.sleep(3)
                 continue
             elif status == "task_cancel":
                 raise Exception("TTS task cancelled")
