@@ -39,8 +39,9 @@ class VideoPipeline:
             scene = f"a dramatic cinematic scene representing {topic}, powerful composition, epic atmosphere"
 
         return (
-            f"Eye-catching YouTube thumbnail, {scene}, "
-            f"title text: {title}"
+            f"YouTube thumbnail image, {scene}, "
+            f"bold title text: {title}, "
+            f"no channel name, no username, no social media handles, no watermark, no logo"
         )
 
     def _update(self, status: str, progress: int, message: str, video_url=None, error=None):
@@ -72,8 +73,9 @@ class VideoPipeline:
                 heading = s.get("heading", f"Point {s['number']}")
                 base_prompt = s.get("image_prompt", req.topic)
                 section_prompt = (
-                    f"Eye-catching YouTube video slide, {base_prompt}, "
-                    f"title text: {heading}"
+                    f"YouTube video slide image, {base_prompt}, "
+                    f"bold text overlay: {heading}, "
+                    f"no channel name, no username, no watermark, no logo, no social handles"
                 )
                 raw_sections.append({
                     "type": "section",
@@ -87,8 +89,8 @@ class VideoPipeline:
                 "text": script["outro"]["text"],
                 "image_prompt": (
                     f"YouTube outro screen, {script['outro']['image_prompt']}, "
-                    f"with bold text: SUBSCRIBE, large red subscribe button, "
-                    f"notification bell icon, like button, "
+                    f"SUBSCRIBE button, notification bell, like button, "
+                    f"no channel name, no username, no watermark, "
                     f"dramatic cinematic background, high quality"
                 ),
                 "heading": "",
