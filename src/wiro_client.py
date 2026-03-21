@@ -122,7 +122,7 @@ async def generate_script_text(prompt: str, system: str = "", max_tokens: int = 
             await asyncio.sleep(3)
     raise Exception("Wiro LLM timeout")
 
-async def generate_video_clip(prompt: str, image_url: str = "", duration: int = 5) -> str:
+async def generate_video_clip(prompt: str, image_url: str = "", duration: int = 5, aspect_ratio: str = "16:9") -> str:
     """
     P-Video ile video klip üretir.
     image_url varsa image-to-video, yoksa text-to-video.
@@ -130,7 +130,7 @@ async def generate_video_clip(prompt: str, image_url: str = "", duration: int = 
     """
     data = {
         "prompt": prompt,
-        "ratio": "16:9",
+        "ratio": aspect_ratio,
         "duration": str(duration),
         "resolution": "720p",
         "fps": "24",
@@ -156,4 +156,7 @@ async def generate_video_clip(prompt: str, image_url: str = "", duration: int = 
         raise Exception(f"P-Video: no taskid in response: {result}")
 
     # Video üretimi daha uzun sürebilir — 300s timeout
-    return await _poll_task(str(taskid), timeout=300)
+    url = await _poll_task(str(taskid), timeout=300)
+    # Wiro video URL bazen geç hazır olur — 5s bekle
+    await asyncio.sleep(5)
+    return url

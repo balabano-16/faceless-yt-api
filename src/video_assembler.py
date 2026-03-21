@@ -5,17 +5,34 @@ import httpx
 import traceback
 from pathlib import Path
 
-async def download_file(url: str, dest: str) -> str:
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        with open(dest, "wb") as f:
-            f.write(resp.content)
-    size = os.path.getsize(dest)
-    print(f"[DEBUG] Downloaded {dest} — {size} bytes")
-    if size == 0:
-        raise Exception(f"Downloaded file is 0 bytes: {dest}")
-    return dest
+async def download_file(url: str, dest: str, retries: int = 5) -> str:
+    """Dosyayı indir — 404 durumunda retry yap (Wiro URL bazen geç hazır olur)"""
+    import asyncio
+    for attempt in range(retries):
+        try:
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.get(url)
+                if resp.status_code == 404 and attempt < retries - 1:
+                    wait = 5 * (attempt + 1)
+                    print(f"[WARN] 404 for {url}, retrying in {wait}s (attempt {attempt+1}/{retries})")
+                    await asyncio.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                with open(dest, "wb") as f:
+                    f.write(resp.content)
+            size = os.path.getsize(dest)
+            print(f"[DEBUG] Downloaded {dest} — {size} bytes")
+            if size == 0:
+                raise Exception(f"Downloaded file is 0 bytes: {dest}")
+            return dest
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404 and attempt < retries - 1:
+                wait = 5 * (attempt + 1)
+                print(f"[WARN] 404 retry {attempt+1}/{retries} in {wait}s")
+                await asyncio.sleep(wait)
+                continue
+            raise
+    raise Exception(f"Failed to download after {retries} attempts: {url}")
 
 def get_audio_duration(audio_path: str) -> float:
     cmd = [
