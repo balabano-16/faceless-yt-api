@@ -6,13 +6,15 @@ from src.script_generator import generate_script
 from src.wiro_client import generate_image, generate_video_clip
 from src.elevenlabs_client import text_to_speech
 from src.video_assembler import assemble_video
+from src.supabase_client import save_video
 
 OUTPUT_BASE = os.environ.get("OUTPUT_DIR", "/tmp/videos")
 BASE_URL = os.environ.get("BASE_URL", "https://faceless-yt-api-production.up.railway.app")
 
 class VideoPipeline:
-    def __init__(self, job_id: str):
+    def __init__(self, job_id: str, user_id: str = ""):
         self.job_id = job_id
+        self.user_id = user_id
         self.output_dir = f"{OUTPUT_BASE}/{job_id}"
 
     def _make_cover_prompt(self, topic: str, title: str, style: str) -> str:
@@ -162,6 +164,13 @@ class VideoPipeline:
 
             # 5. URL döndür
             video_url = f"{BASE_URL}/videos/{self.job_id}/final_{self.job_id}.mp4"
+
+            # Supabase'e kaydet
+            if self.user_id:
+                fmt = "portrait" if is_portrait else "landscape"
+                vtype = "video_clips" if use_video else "image_slides"
+                await save_video(self.user_id, req.topic, fmt, vtype, video_url, title)
+
             self._update("done", 100, "Video ready!", video_url=video_url)
 
         except Exception as e:
