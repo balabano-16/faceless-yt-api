@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -7,6 +7,7 @@ import uuid
 import os
 from src.pipeline import VideoPipeline
 from src.store import job_store
+from src.supabase_client import check_video_limit, get_supabase
 
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/tmp/videos")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -28,8 +29,9 @@ class VideoRequest(BaseModel):
     voice_id: Optional[str] = "21m00Tcm4TlvDq8ikWAM"
     style: Optional[str] = "cinematic, realistic, dramatic"
     language: Optional[str] = "en"
-    format: Optional[str] = "landscape"  # "landscape" veya "portrait"
-    use_video: Optional[bool] = False     # True = video klip, False = görsel
+    format: Optional[str] = "landscape"
+    use_video: Optional[bool] = False
+    user_id: Optional[str] = ""
 
 class JobStatus(BaseModel):
     job_id: str
@@ -41,6 +43,12 @@ class JobStatus(BaseModel):
 
 @app.post("/generate", response_model=JobStatus)
 async def generate_video(req: VideoRequest, background_tasks: BackgroundTasks):
+    # Limit kontrolü
+    if req.user_id:
+        limit_check = await check_video_limit(req.user_id, req.use_video)
+        if not limit_check.get("allowed", True):
+            raise HTTPException(status_code=403, detail=limit_check.get("reason", "Limit reached"))
+
     job_id = str(uuid.uuid4())
     job_store[job_id] = {
         "status": "queued",
@@ -49,7 +57,7 @@ async def generate_video(req: VideoRequest, background_tasks: BackgroundTasks):
         "video_url": None,
         "error": None
     }
-    pipeline = VideoPipeline(job_id)
+    pipeline = VideoPipeline(job_id, user_id=req.user_id or "")
     background_tasks.add_task(pipeline.run, req)
     return JobStatus(job_id=job_id, **job_store[job_id])
 
