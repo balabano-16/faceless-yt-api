@@ -44,7 +44,10 @@ class JobStatus(BaseModel):
 
 def verify_jwt(authorization: Optional[str] = Header(None)) -> str:
     """JWT token doğrula, user_id döndür — user_id artık client'tan gelmiyor"""
+    print(f"[DEBUG] Auth header present: {bool(authorization)}")
+    print(f"[DEBUG] JWT Secret length: {len(SUPABASE_JWT_SECRET)}")
     if not authorization or not authorization.startswith("Bearer "):
+        print(f"[DEBUG] Missing or invalid auth header: {authorization[:20] if authorization else 'NONE'}")
         raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
 
     token = authorization.split(" ")[1]
