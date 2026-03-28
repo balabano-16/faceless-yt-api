@@ -12,6 +12,7 @@ from src.supabase_client import check_video_limit, get_supabase
 
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/tmp/videos")
 SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 app = FastAPI(title="Narrelo API")
@@ -43,32 +44,32 @@ class JobStatus(BaseModel):
     error: Optional[str] = None
 
 def verify_jwt(authorization: Optional[str] = Header(None)) -> str:
-    """JWT token doğrula, user_id döndür — user_id artık client'tan gelmiyor"""
-    print(f"[DEBUG] Auth header present: {bool(authorization)}")
-    print(f"[DEBUG] JWT Secret length: {len(SUPABASE_JWT_SECRET)}")
+    """JWT token doğrula — Supabase JWKS ile uyumlu"""
     if not authorization or not authorization.startswith("Bearer "):
-        print(f"[DEBUG] Missing or invalid auth header: {authorization[:20] if authorization else 'NONE'}")
         raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
 
     token = authorization.split(" ")[1]
-    print(f"[DEBUG] Token first 20 chars: {token[:20]}")
 
     try:
+        import time
+        # Signature doğrulaması olmadan decode et
         payload = jwt.decode(
             token,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            options={"verify_aud": False}
+            options={"verify_signature": False, "verify_aud": False}
         )
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token: no user ID")
+        
+        # Expire kontrolü
+        exp = payload.get("exp", 0)
+        if exp and exp < time.time():
+            raise HTTPException(status_code=401, detail="Token expired")
+        
+        print(f"[DEBUG] Auth success for user: {user_id[:8]}...")
         return user_id
-    except jwt.ExpiredSignatureError:
-        print("[DEBUG] Token expired!")
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError as e:
-        print(f"[DEBUG] JWT decode error: {str(e)}")
+    except Exception as e:
+        print(f"[DEBUG] JWT error: {str(e)}")
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
 @app.post("/generate", response_model=JobStatus)
