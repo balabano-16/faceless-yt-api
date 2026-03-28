@@ -51,6 +51,7 @@ def verify_jwt(authorization: Optional[str] = Header(None)) -> str:
         raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
 
     token = authorization.split(" ")[1]
+    print(f"[DEBUG] Token first 20 chars: {token[:20]}")
 
     try:
         payload = jwt.decode(
@@ -64,8 +65,10 @@ def verify_jwt(authorization: Optional[str] = Header(None)) -> str:
             raise HTTPException(status_code=401, detail="Invalid token: no user ID")
         return user_id
     except jwt.ExpiredSignatureError:
+        print("[DEBUG] Token expired!")
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError as e:
+        print(f"[DEBUG] JWT decode error: {str(e)}")
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
 @app.post("/generate", response_model=JobStatus)
